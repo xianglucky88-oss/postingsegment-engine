@@ -31,6 +31,7 @@ Each component has `POST /v1/<operation>` accepting its JSON request object. Res
 | `vectors` | A connected nearest-neighbor graph with tombstones and an explicit traversal budget. |
 | `paths` | Thompson-style path automata and product-graph reachability for label, sequence, alternative and star. |
 | `spatial` | Immutable bounding hierarchy with closed-rectangle intersection and exact leaf predicates. |
+| `coverage` | Exact footprint-coverage and reference representativeness: overlap-free union on an exhaustive compressed grid, effective weighted denominators, duplicate-identity merging, gap attribution and split/merge conservation. |
 | `morphology` | Nonnegative weighted lexical transducers with ranked ambiguous outputs. |
 
 ## Request examples
@@ -47,6 +48,8 @@ Use one operation request from that output as the JSON body for its `/v1/<operat
 ## Supported scope
 
 Text indexes use a single writer per directory; old segments remain available and automatic compaction is not implemented. Vector search is approximate when its traversal budget is truncated and is not presented as exact top-k. Rectangles are planar and finite. Morphology rejects epsilon cycles. None of these libraries infer business entity identity.
+
+Coverage analysis is exact while its compressed grids fit the request budget; otherwise the affected zones and the independent conservation grid are reported as `incomplete` rather than counted as zero coverage. Boundary-only contact contributes no area, zero-area reference units are flagged, unknown weights are excluded from weighted denominators and listed separately, and records sharing a source identity are merged so duplicates never enlarge the covered area. Every coverage gap is attributed to missing observations or missing reference material, and per-zone totals are reconciled against an independent whole-extent grid.
 
 Runtime state uses explicit temporary directories or caller-provided library objects. Service examples are per-request computations; use the library interfaces for persistent state and long-lived readers.
 
