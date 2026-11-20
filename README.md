@@ -29,9 +29,36 @@ Each component has `POST /v1/<operation>` accepting its JSON request object. Res
 |---|---|
 | `segments` | Persistent immutable text segments, positional phrase matching, updates/deletes and snapshot readers. |
 | `vectors` | A connected nearest-neighbor graph with tombstones and an explicit traversal budget. |
+| `density` | DBSCAN-style density clustering over a vector index with evidence-aware labels and versioned snapshots. |
 | `paths` | Thompson-style path automata and product-graph reachability for label, sequence, alternative and star. |
 | `spatial` | Immutable bounding hierarchy with closed-rectangle intersection and exact leaf predicates. |
 | `morphology` | Nonnegative weighted lexical transducers with ranked ambiguous outputs. |
+
+### Density clustering
+
+`density` takes sample identities with their vectors, a distance threshold
+`epsilon`, a `min_samples` density gate and an optional traversal `budget`.
+It reports per-sample membership (`core`, `border`, `noise`,
+`unconfirmed`), each cluster's size and member set, and within-cluster
+distance distributions (pairwise and nearest-neighbor squared-distance
+stats plus a histogram).
+
+The graph is only a candidate channel. A traversal truncated by the budget
+is never interpreted as "this sample has no neighbors": labels are confirmed
+only on complete neighborhood evidence, and unsupported samples are reported
+as `unconfirmed` rather than false noise. The response carries `exact`,
+`truncated_searches` and `visited_total`, and each assignment flags whether
+its neighborhood search completed.
+
+All memberships and statistics are computed against one immutable snapshot
+identified by a version digest. Batch corrections (`add` / `delete` /
+`replace` via `VectorIndex.apply`) are atomic: any failed operation rolls the
+whole batch back, so an update failure never publishes results that mix
+sample versions. Acceptance compares cluster member sets (frozen sets), not
+cluster numbers; on small data the results are cross-checked against an
+independent exhaustive O(n²) neighborhood reference. The analysis enforces a
+working-set limit and reports traversal cost so recall shortfalls on highly
+clustered data stay visible.
 
 ## Request examples
 
@@ -46,7 +73,7 @@ Use one operation request from that output as the JSON body for its `/v1/<operat
 
 ## Supported scope
 
-Text indexes use a single writer per directory; old segments remain available and automatic compaction is not implemented. Vector search is approximate when its traversal budget is truncated and is not presented as exact top-k. Rectangles are planar and finite. Morphology rejects epsilon cycles. None of these libraries infer business entity identity.
+Text indexes use a single writer per directory; old segments remain available and automatic compaction is not implemented. Vector search is approximate when its traversal budget is truncated and is not presented as exact top-k. Density clustering is likewise approximate under truncation: unconfirmed samples are labeled explicitly and noise is asserted only from complete neighborhood evidence. Rectangles are planar and finite. Morphology rejects epsilon cycles. None of these libraries infer business entity identity.
 
 Runtime state uses explicit temporary directories or caller-provided library objects. Service examples are per-request computations; use the library interfaces for persistent state and long-lived readers.
 

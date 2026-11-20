@@ -17,6 +17,28 @@ class VectorIndex:
             self.edges[i].add(identity)
             # Keep reciprocal links; this small graph prioritizes reachability.
     def delete(self,identity):self.live.discard(identity)
+    def replace(self,identity,values):
+        # Correct an existing live sample: vector and edges change atomically.
+        if identity not in self.live:raise ValueError("unknown or deleted identity")
+        old=self.values[identity];v=self.vector(values)
+        neighbors=sorted((i for i in self.live if i!=identity),key=lambda i:(self.distance(v,self.values[i]),i))[:self.m]
+        self.values[identity]=v
+        for other in self.edges[identity]:self.edges[other].discard(identity)
+        self.edges[identity]=set(neighbors)
+        for other in neighbors:self.edges[other].add(identity)
+    def apply(self,operations):
+        # Apply a batch of corrections; any failure rolls every change back so
+        # the index never publishes a state that mixes old and new samples.
+        backup=(dict(self.values),{i:set(e) for i,e in self.edges.items()},set(self.live))
+        try:
+            for op in operations:
+                kind=op.get('op')
+                if kind=='add':self.add(op['id'],op['vector'])
+                elif kind=='delete':self.delete(op['id'])
+                elif kind=='replace':self.replace(op['id'],op['vector'])
+                else:raise ValueError("unknown vector operation")
+        except Exception:
+            self.values,self.edges,self.live=backup;raise
     def query(self,values,k=3,budget=10000):
         q=self.vector(values)
         if not isinstance(k,int) or k<1 or not isinstance(budget,int) or budget<1:raise ValueError("invalid query budget")
